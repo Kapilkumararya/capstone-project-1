@@ -63,14 +63,25 @@ async def detect_ingredients(
     )
 
     # Step 4: Persist Detection Run (LLM given priority for final ingredients)
-    final_ingredients = llm_verif["confirmed_ingredients"]
+    # Combine confirmed and any newly added ingredients by the LLM
+    final_ingredients = list(set(
+        llm_verif.get("confirmed_ingredients", []) + llm_verif.get("added_ingredients", [])
+    ))
+
+    # Filter bounding boxes to only keep those approved by the LLM
+    # (Checking if the box label is substring of any final ingredient or vice versa to handle slight standardizations)
+    filtered_boxes = []
+    for box in bounding_boxes:
+        label = box.get("label", "").lower()
+        if any(label in fi or fi in label for fi in final_ingredients):
+            filtered_boxes.append(box)
 
     run = DetectionRun(
         user_id=current_user.id,
         ingredients=final_ingredients,
         raw_ingredients=raw_candidates,
         confidence_scores=confidence_scores,
-        bounding_boxes=bounding_boxes,
+        bounding_boxes=filtered_boxes,
         llm_confirmed=llm_verif["llm_confirmed"],
         llm_reasoning=llm_verif.get("reasoning"),
         llm_removed=llm_verif.get("removed_candidates", []),

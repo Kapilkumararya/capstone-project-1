@@ -11,12 +11,15 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 SYSTEM_PROMPT = (
     "You are an expert culinary vision and ingredient verification AI. "
-    "Your job is to examine candidate ingredients detected by a computer vision model "
-    "and provide the authoritative, final prioritized list of ingredients.\n"
+    "Your job is to examine an image and provide the authoritative, final list of ingredients visible in the image.\n"
+    "CRITICAL INSTRUCTION: The candidate ingredients provided to you may be from a dummy simulator and might be completely incorrect. "
+    "You MUST completely ignore the candidate ingredients if they do not match what you see in the image. "
+    "Rely solely on your own visual analysis of the image to determine the actual ingredients present.\n"
+    "CRITICAL INSTRUCTION 2: YOU MUST NOT output any `<think>` blocks, reasoning, or explanations. You MUST immediately start your response with `{` and end it with `}` and provide nothing else.\n"
     "Rules:\n"
-    "1. Remove non-food items, containers, cutlery, or erroneous detections.\n"
-    "2. Standardize common ingredient names (e.g. 'yellow onion' -> 'onion', 'clove of garlic' -> 'garlic').\n"
-    "3. Add any clearly identified ingredients that may have been missed or implied.\n"
+    "1. Identify all food ingredients clearly visible in the image.\n"
+    "2. Remove non-food items, containers, cutlery, or erroneous detections.\n"
+    "3. Standardize common ingredient names (e.g. 'yellow onion' -> 'onion', 'clove of garlic' -> 'garlic').\n"
     "4. Return strictly valid JSON with no extra commentary:\n"
     "{\n"
     '  "confirmed_ingredients": ["ingredient1", "ingredient2"],\n'
@@ -27,8 +30,11 @@ SYSTEM_PROMPT = (
 )
 
 
-def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
+def _extract_json_from_text(text: Optional[str]) -> Optional[Dict[str, Any]]:
     """Extract and parse JSON from model output, handling markdown blocks or thoughts."""
+    if not text:
+        logger.warning("LLM response content was empty or None.")
+        return None
     try:
         # Strip potential think tags from reasoning models
         text_clean = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
@@ -45,7 +51,7 @@ def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
             
         return json.loads(text_clean)
     except Exception as e:
-        logger.warning(f"Could not parse JSON from LLM response: {e}")
+        logger.warning(f"Could not parse JSON from LLM response: {e}. Raw content was: {repr(text)}")
         return None
 
 
@@ -77,10 +83,11 @@ async def verify_and_prioritize_ingredients_with_llm(
     }
 
     prompt_text = (
-        f"Candidate ingredients detected by vision detector: {candidate_ingredients}.\n"
-        f"Confidence scores: {confidence_scores if confidence_scores else 'N/A'}.\n"
-        "Please inspect the ingredients (and image if provided), filter false positives, "
-        "and produce the authoritative verified ingredient list."
+        f"Simulated candidate ingredients (MAY BE WRONG): {candidate_ingredients}.\n"
+        f"Simulated confidence scores: {confidence_scores if confidence_scores else 'N/A'}.\n"
+        "Please inspect the provided image carefully. If the simulated candidates do not match "
+        "what you see in the image, completely ignore them and output only the actual ingredients "
+        "visible in the image."
     )
 
     # Strategy 1: Attempt Multimodal Vision Call if image provided
@@ -104,7 +111,7 @@ async def verify_and_prioritize_ingredients_with_llm(
                     headers=headers,
                     json={
                         "model": "qwen/qwen3.6-27b",
-                        "max_tokens": 350,
+                        "max_tokens": 850,
                         "temperature": 0.1,
                         "messages": messages
                     }
@@ -143,8 +150,9 @@ async def verify_and_prioritize_ingredients_with_llm(
                 headers=headers,
                 json={
                     "model": "openai/gpt-oss-120b",
-                    "max_tokens": 350,
+                    "max_tokens": 1024,
                     "temperature": 0.1,
+                    "response_format": {"type": "json_object"},
                     "messages": text_messages
                 }
             )
