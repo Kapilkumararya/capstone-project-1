@@ -1,0 +1,3 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { SimplePage } from "@/components/cookai";
+export const Route = createFileRoute("/preferences")({ head: () => ({ meta: [{ title: "Dietary Preferences — CookAI" }, { name: "description", content: "Personalize CookAI recipe recommendations." }, { property: "og:title", content: "Dietary Preferences — CookAI" }, { property: "og:description", content: "Personalize CookAI recipe recommendations." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" }] }), component: () => <SimplePage title="Dietary preferences" text="Shape every recommendation around the way you like to eat." /> });
