@@ -205,21 +205,48 @@ export function HomePage() {
 export function RecipesPage() {
   const search = recipesRoute.useSearch();
   const initialIngredients = search.ingredients ? JSON.parse(search.ingredients) : ["tomato", "egg", "spinach", "onion", "garlic"];
+  const isDefault = !search.ingredients;
   const [ingredients, setIngredients] = useState<string[]>(initialIngredients);
   const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [trending, setTrending] = useState<any[]>([]);
   const { user } = useAuth();
   
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 6;
+  
+  // Session Preferences State
+  const [showPrefsModal, setShowPrefsModal] = useState(false);
+  const [sessionDiet, setSessionDiet] = useState<string[]>([]);
+  const [sessionTime, setSessionTime] = useState(30);
+
   useEffect(() => {
-    if (user && ingredients.length > 0) {
+    if (user) {
+      setSessionDiet(user.dietary_preferences || []);
+      setSessionTime(user.max_prep_time || 30);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (isDefault) {
+      fetchApi("/community/recipes/trending").then(res => setTrending(res || [])).catch(console.error);
+    }
+  }, [isDefault]);
+  
+  useEffect(() => {
+    if (user && ingredients.length > 0 && !isDefault) {
       fetchApi("/recommendations/", {
         method: "POST",
-        body: JSON.stringify({ ingredients, limit: 10 })
-      }).then(res => setRecommendations(res.results || []))
-        .catch(console.error);
+        body: JSON.stringify({ ingredients, limit: 30 }) // Fetch more for pagination
+      }).then(res => {
+        setRecommendations(res.results || []);
+        setPage(1);
+      }).catch(console.error);
     }
-  }, [ingredients, user]);
+  }, [ingredients, user, isDefault, sessionDiet, sessionTime]);
 
-  const displayRecipes = recommendations.length > 0 
+  const toggleSessionDiet = (d: string) => setSessionDiet(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+
+  const allDisplayRecipes = (!isDefault && recommendations.length > 0)
     ? recommendations.map(r => ({
         id: r.recipe_id,
         title: r.title,
@@ -229,15 +256,77 @@ export function RecipesPage() {
         level: "Easy",
         tag: r.tags?.[0] || "Dinner"
       }))
-    : recipeData.map(r => ({ ...r, id: "" }));
+    : trending.length > 0 
+      ? trending.map(r => ({
+          id: r.id,
+          title: r.title,
+          image: bowl,
+          match: 95,
+          time: "20 mins",
+          level: "Easy",
+          tag: "Trending"
+        })).slice(0, 3)
+      : recipeData.map(r => ({ ...r, id: "" })).slice(0, 3); // Fallback if DB empty
+
+  const totalPages = Math.ceil(allDisplayRecipes.length / itemsPerPage);
+  const displayRecipes = isDefault 
+    ? allDisplayRecipes 
+    : allDisplayRecipes.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
   return <div className="mx-auto max-w-7xl space-y-8 gentle-in"><PageTitle eyebrow="Pantry scan · analysis complete" title="AI Recipe Discovery" />
     <div className="grid gap-5 xl:grid-cols-[1.35fr_.9fr]">
-      <section className="rounded-2xl bg-card p-5 soft-shadow"><h2 className="flex items-center gap-2 font-bold"><SlidersHorizontal className="size-5" /> Detected Ingredients</h2><div className="mt-4 grid gap-5 sm:grid-cols-[180px_1fr]"><img src={produce} alt="Detected pantry ingredients" width={1400} height={1000} className="aspect-[4/3] h-full w-full rounded-xl object-cover" /><div><p className="mb-3 text-xs text-muted-foreground">Tap to discard ingredients or refine detection:</p><div className="flex flex-wrap gap-2">{ingredients.map((x) => <Button key={x} variant="secondary" size="sm" className="rounded-full" onClick={() => setIngredients(ingredients.filter((i) => i !== x))}>{x}<X className="size-3" /></Button>)}<Button size="sm" variant="outline" className="rounded-full">+ Add more</Button></div><p className="mt-5 text-[11px] text-muted-foreground">CookAI cross-referenced 34 seasonal recipes with your pantry.</p></div></div></section>
-      <section className="rounded-2xl bg-card p-5 soft-shadow"><div className="flex justify-between"><h2 className="font-bold">Your Preferences</h2><Button variant="ghost" size="sm">Edit</Button></div><p className="mt-2 text-xs text-muted-foreground">Current constraints applied from your Kitchen Profile:</p><div className="mt-4 flex flex-wrap gap-2">{["🌱 Vegetarian", "⏱ Quick < 30 mins", "⚡ High Protein", "👍 Easy Skill Level"].map(x => <Chip key={x}>{x}</Chip>)}</div><div className="mt-5 flex items-center gap-3 rounded-xl bg-secondary p-3"><strong className="grid size-11 place-items-center rounded-full border-4 border-primary">88%</strong><span className="text-xs"><b className="block">Pantry compatibility</b>{ingredients.length} ingredients matched</span></div></section>
+      <section className="rounded-2xl bg-card p-5 soft-shadow"><h2 className="flex items-center gap-2 font-bold"><SlidersHorizontal className="size-5" /> Detected Ingredients</h2><div className="mt-4 grid gap-5 sm:grid-cols-[180px_1fr]"><img src={produce} alt="Detected pantry ingredients" width={1400} height={1000} className="aspect-[4/3] h-full w-full rounded-xl object-cover" /><div><p className="mb-3 text-xs text-muted-foreground">Tap to discard ingredients or refine detection:</p><div className="flex flex-wrap gap-2">{ingredients.map((x) => <Button key={x} variant="secondary" size="sm" className="rounded-full" onClick={() => setIngredients(ingredients.filter((i) => i !== x))}>{x}<X className="size-3" /></Button>)}<Button size="sm" variant="outline" className="rounded-full">+ Add more</Button></div><p className="mt-5 text-[11px] text-muted-foreground">CookAI cross-referenced recipes with your pantry.</p></div></div></section>
+      <section className="rounded-2xl bg-card p-5 soft-shadow"><div className="flex justify-between"><h2 className="font-bold">Session Preferences</h2><Button variant="ghost" size="sm" onClick={() => setShowPrefsModal(true)}>Edit</Button></div><p className="mt-2 text-xs text-muted-foreground">Temporary filters applied for this search:</p><div className="mt-4 flex flex-wrap gap-2">{sessionDiet.map((x: string) => <Chip key={x}>🌱 {x}</Chip>)}<Chip key="time">⏱ &lt; {sessionTime} mins</Chip></div><div className="mt-5 flex items-center gap-3 rounded-xl bg-secondary p-3"><strong className="grid size-11 place-items-center rounded-full border-4 border-primary">88%</strong><span className="text-xs"><b className="block">Pantry compatibility</b>{ingredients.length} ingredients matched</span></div></section>
     </div>
-    <section><PageTitle title="Top Recipe Recommendations" action={<div className="flex gap-2"><Chip><Check className="size-3" /> AI Verified</Chip><Button variant="outline" size="sm" className="rounded-full">Best Match <ChevronDown /></Button></div>} /><div className="mt-5 grid gap-5 md:grid-cols-3">{displayRecipes.map((r, i) => <RecipeCard key={i} recipe={r} action />)}</div></section>
+    
+    <section>
+      <PageTitle title="Top Recipe Recommendations" action={<div className="flex gap-2"><Chip><Check className="size-3" /> AI Verified</Chip><Button variant="outline" size="sm" className="rounded-full">Best Match <ChevronDown /></Button></div>} />
+      <div className="mt-5 grid gap-5 md:grid-cols-3">{displayRecipes.map((r, i) => <RecipeCard key={i} recipe={r} action />)}</div>
+      
+      {!isDefault && totalPages > 1 && (
+        <div className="mt-8 flex items-center justify-center gap-4">
+          <Button variant="outline" size="sm" className="rounded-full" disabled={page === 1} onClick={() => setPage(page - 1)}>
+            <ArrowLeft className="size-4 mr-1"/> Previous
+          </Button>
+          <span className="text-xs font-bold text-muted-foreground">Page {page} of {totalPages}</span>
+          <Button variant="outline" size="sm" className="rounded-full" disabled={page === totalPages} onClick={() => setPage(page + 1)}>
+            Next <ArrowRight className="size-4 ml-1"/>
+          </Button>
+        </div>
+      )}
+    </section>
+    
     <div className="flex items-center gap-3 rounded-2xl bg-card p-4 soft-shadow"><MessageCircle className="size-5" /><div className="hidden sm:block"><p className="text-xs font-bold">Want to tweak these suggestions?</p><p className="text-[11px] text-muted-foreground">Ask CookAI to replace an ingredient or limit prep equipment.</p></div><input className="ml-auto min-w-0 flex-1 rounded-full bg-secondary px-4 py-2 text-xs outline-none sm:max-w-sm" placeholder="e.g. Make it dairy-free…"/><Button size="icon" className="rounded-full" aria-label="Send request"><ArrowRight /></Button></div>
+
+    {showPrefsModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl">
+          <h2 className="text-lg font-bold">Temporary Preferences</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Changes here only apply to this current search session.</p>
+          
+          <div className="mt-6">
+            <h3 className="text-sm font-bold">Dietary Filters</h3>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {["Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free", "Keto"].map(d => (
+                <label key={d} className={`flex cursor-pointer items-center gap-2 rounded-lg border p-2 text-xs ${sessionDiet.includes(d) ? "bg-secondary border-primary/20" : "bg-muted border-transparent"}`}>
+                  <Checkbox checked={sessionDiet.includes(d)} onCheckedChange={() => toggleSessionDiet(d)} /> {d}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h3 className="text-sm font-bold">Max Prep Time ({sessionTime} mins)</h3>
+            <input type="range" min="10" max="120" step="10" value={sessionTime} onChange={(e) => setSessionTime(parseInt(e.target.value))} className="mt-3 w-full" />
+          </div>
+
+          <div className="mt-8 flex justify-end gap-3">
+            <Button variant="ghost" onClick={() => setShowPrefsModal(false)}>Cancel</Button>
+            <Button onClick={() => setShowPrefsModal(false)}>Apply Filters</Button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>;
 }
 
@@ -261,7 +350,21 @@ export function CookPage() {
   const [checked, setChecked] = useState([true,true,false,false,false]);
   
   useEffect(() => {
-    if (!recipeId || !user) return;
+    if (!recipeId) {
+      // Fallback to dummy data if no real recipe ID is provided
+      setRecipe({
+        title: "Dummy Recipe",
+        ingredients: ["dummy ingredient 1", "dummy ingredient 2"],
+        time: "20 mins",
+        steps: ["Prep ingredients", "Cook", "Serve"]
+      });
+      setSession({ session_id: "dummy" });
+      setStep(1);
+      setMessages([{ role: "assistant", text: "Welcome to the dummy session! This recipe is a placeholder." }]);
+      return;
+    }
+    
+    if (!user) return;
     
     fetchApi("/assistant/sessions", {
       method: "POST",
@@ -280,7 +383,10 @@ export function CookPage() {
           text: m.content
         })));
       }
-    }).catch(console.error);
+    }).catch(err => {
+      console.error(err);
+      setRecipe({ title: "Error Loading Recipe", steps: [] });
+    });
     
   }, [recipeId, user]);
 
@@ -317,21 +423,239 @@ export function CookPage() {
 
 function Avatar({ name }: { name: string }) { return <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sun/40 font-bold text-primary">{name.slice(0,1).toUpperCase()}</span>; }
 
-function CommunityPost({ second = false }: { second?: boolean }) {
-  const [votes,setVotes] = useState(second ? 289 : 432); const [following,setFollowing] = useState(false); const [saved,setSaved] = useState(false);
-  const name = second ? "goodfoodie" : "foodie.sarah";
-  return <article className="rounded-2xl bg-card p-5 soft-shadow"><div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3"><Avatar name={name}/><div className="min-w-0"><p className="truncate font-bold">{name}</p><p className="text-[11px] text-muted-foreground">{second ? "4h ago" : "2h ago"} · <span className="text-primary">● Vegetarian</span></p></div><Button size="sm" variant="secondary" className="rounded-full" onClick={() => setFollowing(!following)}>{following ? "Following" : "Follow"}</Button></div>
-    <h2 className="mt-5 text-xl font-bold">{second ? "Charred Lemon Herb Salmon Bowls" : "Creamy Tomato Basil Pasta 🍅"}</h2><p className="mt-1 text-sm text-muted-foreground">{second ? "Quick weekday meal prep win. Cooked with crisp snap peas, fluffy quinoa, and a bright lemon dressing." : "Super easy, super delicious! Perfect for a cozy autumn dinner. Takes only 20 mins and uses simple pantry ingredients."}</p>
-    <img src={second ? bowl : pasta} alt={second ? "Salmon-style grain bowl with fresh vegetables" : "Creamy tomato basil pasta"} width={1000} height={1000} loading="lazy" className="mt-5 aspect-[16/10] w-full rounded-xl object-cover"/>
-    <div className="mt-4 flex items-center gap-3"><Button variant="secondary" size="sm" className="rounded-full" onClick={() => setVotes(votes+1)}><ThumbsUp/>{votes}</Button><Button variant="ghost" size="sm"><MessageCircle/> {second ? 32 : 56}</Button><Button variant="ghost" size="sm" className="ml-auto" onClick={() => setSaved(!saved)} aria-label="Save post"><Bookmark className={saved ? "fill-primary" : ""}/></Button></div>
-    {!second && <div className="mt-4 space-y-3 rounded-xl bg-muted p-4 text-xs"><p><b>mealprep.mike</b> This looks amazing! I’m definitely trying this tonight. 😍</p><p><b>cooking.with.anna</b> Added it to my weekly menu! Thank you!</p></div>}
+function CommunityPost({ post, onVote, onComment, currentUser }: { post: any; onVote: (id: string) => void; onComment: (id: string, text: string) => void; currentUser: any }) {
+  const [following, setFollowing] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [showCommentInput, setShowCommentInput] = useState(false);
+  
+  return <article className="rounded-2xl bg-card p-5 soft-shadow">
+    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
+      <Avatar name={post.author_name}/>
+      <div className="min-w-0">
+        <p className="truncate font-bold">{post.author_name}</p>
+        <p className="text-[11px] text-muted-foreground">{new Date(post.created_at).toLocaleDateString()} {post.tags?.length ? `· ${post.tags.map((t: string) => `● ${t}`).join(" ")}` : ""}</p>
+      </div>
+      {currentUser?.username !== post.author_name && (
+        <Button size="sm" variant="secondary" className="rounded-full" onClick={() => setFollowing(!following)}>{following ? "Following" : "Follow"}</Button>
+      )}
+    </div>
+    
+    <h2 className="mt-5 text-xl font-bold">{post.title}</h2>
+    <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">{post.content}</p>
+    
+    {post.video_url ? (
+      <div className="mt-5 relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+        <video src={post.video_url} controls className="h-full w-full object-contain" />
+      </div>
+    ) : post.image_url ? (
+      <img src={post.image_url} alt="Post image" width={1000} height={1000} loading="lazy" className="mt-5 aspect-[16/10] w-full rounded-xl object-cover"/>
+    ) : null}
+
+    {post.embedded_recipe && (
+      <div className="mt-5 rounded-xl bg-secondary/50 p-4 text-sm whitespace-pre-wrap font-mono border border-border">
+        <b className="block mb-2 text-primary uppercase text-xs tracking-wider">Recipe Steps</b>
+        {post.embedded_recipe}
+      </div>
+    )}
+    
+    <div className="mt-4 flex items-center gap-3">
+      <Button variant="secondary" size="sm" className="rounded-full" onClick={() => onVote(post.id)}>
+        <ThumbsUp/> {post.votes}
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => setShowCommentInput(!showCommentInput)}>
+        <MessageCircle/> {post.comments?.length || 0}
+      </Button>
+      <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setSaved(!saved)} aria-label="Save post">
+        <Bookmark className={saved ? "fill-primary" : ""}/>
+      </Button>
+    </div>
+    
+    {(post.comments?.length > 0 || showCommentInput) && (
+      <div className="mt-4 space-y-3 rounded-xl bg-muted p-4 text-xs">
+        {post.comments?.map((c: any, i: number) => (
+          <p key={i}><b>{c.author_name}</b> {c.content}</p>
+        ))}
+        {showCommentInput && (
+          <form className="flex gap-2 mt-2" onSubmit={e => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            const val = String(fd.get("comment") || "").trim();
+            if (val) {
+              onComment(post.id, val);
+              e.currentTarget.reset();
+            }
+          }}>
+            <input name="comment" className="min-w-0 flex-1 rounded-full bg-secondary px-3 py-1 outline-none" placeholder="Add a comment..."/>
+            <Button size="sm" className="rounded-full">Send</Button>
+          </form>
+        )}
+      </div>
+    )}
   </article>;
 }
 
 export function CommunityPage() {
-  const [tab,setTab] = useState("For You");
-  return <div className="mx-auto max-w-7xl gentle-in"><div className="flex flex-wrap items-center gap-4"><PageTitle title="Community"/><div className="flex rounded-full bg-card p-1">{["For You","Following","Trending"].map(x => <Button key={x} size="sm" variant={tab === x ? "default" : "ghost"} className="rounded-full" onClick={() => setTab(x)}>{x}</Button>)}</div><Button className="ml-auto rounded-full"><span className="text-lg">+</span>Create post</Button></div>
-    <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_310px]"><div className="space-y-6"><CommunityPost/><CommunityPost second/></div><aside className="space-y-5 xl:sticky xl:top-24"><section className="rounded-2xl bg-card p-5 soft-shadow"><h2 className="font-bold">Popular Creators</h2><div className="mt-4 space-y-4">{[["foodie.sarah","12.4k"],["mealprep.mike","8.2k"],["cooking.with.anna","6.7k"]].map(([n,c]) => <div key={n} className="grid grid-cols-[auto_1fr_auto] items-center gap-2"><Avatar name={n}/><span className="min-w-0"><b className="block truncate text-xs">{n}</b><small className="text-muted-foreground">{c} followers</small></span><Button size="sm" variant="secondary" className="rounded-full">Follow</Button></div>)}</div></section><section className="rounded-2xl bg-card p-5 soft-shadow"><h2 className="font-bold">Trending Recipes</h2><div className="mt-4 space-y-4">{recipeData.map(r => <div key={r.title} className="flex gap-3"><img src={r.image} alt="" width={1000} height={1000} loading="lazy" className="size-12 rounded-lg object-cover"/><span className="min-w-0"><b className="block truncate text-xs">{r.title}</b><small className="text-muted-foreground">↑ {r.match * 100} upvotes</small></span></div>)}</div></section></aside></div>
+  const [tab, setTab] = useState("For You");
+  const [posts, setPosts] = useState<any[]>([]);
+  const [creators, setCreators] = useState<any[]>([]);
+  const [trending, setTrending] = useState<any[]>([]);
+  const { user } = useAuth();
+  
+  // Create Post Modal State
+  const [showModal, setShowModal] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newContent, setNewContent] = useState("");
+  const [newImage, setNewImage] = useState("");
+  const [newVideo, setNewVideo] = useState("");
+  const [newRecipe, setNewRecipe] = useState("");
+
+  const fetchData = async () => {
+    try {
+      const [pRes, cRes, tRes] = await Promise.all([
+        fetchApi("/community/posts"),
+        fetchApi("/community/creators/popular"),
+        fetchApi("/community/recipes/trending")
+      ]);
+      setPosts(pRes || []);
+      setCreators(cRes || []);
+      setTrending(tRes || []);
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleVote = async (id: string) => {
+    if (!user) return alert("Must be logged in to vote");
+    try {
+      await fetchApi(`/community/posts/${id}/vote`, { method: "POST" });
+      setPosts(posts.map(p => p.id === id ? { ...p, votes: p.votes + 1 } : p));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleComment = async (id: string, text: string) => {
+    if (!user) return alert("Must be logged in to comment");
+    try {
+      const c = await fetchApi(`/community/posts/${id}/comment`, {
+        method: "POST",
+        body: JSON.stringify({ content: text })
+      });
+      setPosts(posts.map(p => p.id === id ? { ...p, comments: [...(p.comments||[]), c] } : p));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCreatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return alert("Must be logged in to post");
+    try {
+      await fetchApi("/community/posts", {
+        method: "POST",
+        body: JSON.stringify({
+          title: newTitle,
+          content: newContent,
+          image_url: newImage || null,
+          video_url: newVideo || null,
+          embedded_recipe: newRecipe || null
+        })
+      });
+      setShowModal(false);
+      setNewTitle("");
+      setNewContent("");
+      setNewImage("");
+      setNewVideo("");
+      setNewRecipe("");
+      fetchData();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to create post");
+    }
+  };
+
+  return <div className="mx-auto max-w-7xl gentle-in">
+    <div className="flex flex-wrap items-center gap-4">
+      <PageTitle title="Community"/>
+      <div className="flex rounded-full bg-card p-1">
+        {["For You","Following","Trending"].map(x => <Button key={x} size="sm" variant={tab === x ? "default" : "ghost"} className="rounded-full" onClick={() => setTab(x)}>{x}</Button>)}
+      </div>
+      <Button className="ml-auto rounded-full" onClick={() => setShowModal(true)}>
+        <span className="text-lg mr-1">+</span> Create post
+      </Button>
+    </div>
+    
+    <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_310px]">
+      <div className="space-y-6">
+        {posts.length === 0 ? <div className="text-center p-8 text-muted-foreground">No posts yet. Be the first!</div> : null}
+        {posts.map(p => <CommunityPost key={p.id} post={p} onVote={handleVote} onComment={handleComment} currentUser={user} />)}
+      </div>
+      <aside className="space-y-5 xl:sticky xl:top-24">
+        <section className="rounded-2xl bg-card p-5 soft-shadow">
+          <h2 className="font-bold">Popular Creators</h2>
+          <div className="mt-4 space-y-4">
+            {creators.length === 0 && <p className="text-xs text-muted-foreground">No creators yet.</p>}
+            {creators.map((c) => (
+              <div key={c.name} className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+                <Avatar name={c.name}/>
+                <span className="min-w-0">
+                  <b className="block truncate text-xs">{c.name}</b>
+                  <small className="text-muted-foreground">{c.followers} followers</small>
+                </span>
+                {user?.username !== c.name && (
+                  <Button size="sm" variant="secondary" className="rounded-full">Follow</Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="rounded-2xl bg-card p-5 soft-shadow">
+          <h2 className="font-bold">Trending Recipes</h2>
+          <div className="mt-4 space-y-4">
+            {trending.length === 0 && <p className="text-xs text-muted-foreground">No recipes yet.</p>}
+            {trending.map(r => (
+              <Link key={r.id} to="/cook" search={{ recipeId: r.id }} className="flex gap-3 hover:bg-secondary/50 p-2 rounded-xl transition-colors cursor-pointer">
+                <div className="grid size-12 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+                  <ChefHat className="size-6" />
+                </div>
+                <span className="min-w-0 self-center">
+                  <b className="block truncate text-xs">{r.title}</b>
+                  <small className="text-muted-foreground">↑ {r.upvotes} upvotes</small>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    {showModal && (
+      <div className="fixed inset-0 bg-background/80 flex items-center justify-center p-4 z-50">
+        <div className="bg-card rounded-2xl p-6 w-full max-w-lg shadow-xl border border-border max-h-[90vh] overflow-y-auto">
+          <h2 className="text-xl font-bold mb-4">Create a Post</h2>
+          <form onSubmit={handleCreatePost} className="space-y-4">
+            <input required value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Title" className="w-full bg-secondary p-3 rounded-xl outline-none" />
+            <textarea required value={newContent} onChange={e => setNewContent(e.target.value)} placeholder="Short description..." rows={2} className="w-full bg-secondary p-3 rounded-xl outline-none resize-none" />
+            
+            <div className="grid grid-cols-2 gap-3">
+              <input value={newImage} onChange={e => setNewImage(e.target.value)} placeholder="Image URL (optional)" className="w-full bg-secondary p-3 rounded-xl outline-none text-sm" />
+              <input value={newVideo} onChange={e => setNewVideo(e.target.value)} placeholder="Video URL (optional)" className="w-full bg-secondary p-3 rounded-xl outline-none text-sm" />
+            </div>
+
+            <textarea value={newRecipe} onChange={e => setNewRecipe(e.target.value)} placeholder="Recipe steps (optional)..." rows={4} className="w-full bg-secondary p-3 rounded-xl outline-none resize-none font-mono text-sm" />
+
+            <div className="flex justify-end gap-3 mt-4">
+              <Button type="button" variant="ghost" onClick={() => setShowModal(false)}>Cancel</Button>
+              <Button type="submit">Post</Button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
   </div>;
 }
 
@@ -347,9 +671,39 @@ export function CookTogetherPage() {
 }
 
 export function PreferencesPage() {
-  const [diet, setDiet] = useState<string[]>(["Vegetarian"]);
+  const { user } = useAuth();
+  const [diet, setDiet] = useState<string[]>([]);
   const [time, setTime] = useState("30");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setDiet(user.dietary_preferences || []);
+      setTime(String(user.max_prep_time || 30));
+    }
+  }, [user]);
+
   const toggleDiet = (d: string) => setDiet(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+  
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await fetchApi("/auth/me/preferences", {
+        method: "PUT",
+        body: JSON.stringify({
+          dietary_preferences: diet,
+          max_prep_time: parseInt(time, 10)
+        })
+      });
+      alert("Preferences saved successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save preferences.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return <div className="mx-auto max-w-5xl gentle-in"><PageTitle title="Dietary Preferences"/>
     <section className="relative mt-6 min-h-[420px] rounded-2xl bg-card p-8 soft-shadow">
       <h2 className="text-xl font-bold">Dietary Restrictions</h2>
@@ -369,7 +723,9 @@ export function PreferencesPage() {
         <span className="font-bold text-sm w-16 text-right">{time} mins</span>
       </div>
       
-      <Button className="mt-10 rounded-full">Save Preferences</Button>
+      <Button className="mt-10 rounded-full" onClick={handleSave} disabled={saving}>
+        {saving ? "Saving..." : "Save Preferences"}
+      </Button>
     </section>
   </div>;
 }

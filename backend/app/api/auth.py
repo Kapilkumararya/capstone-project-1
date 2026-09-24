@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from app.models.user import User
-from app.schemas.user import UserCreate, UserOut, Token
+from app.schemas.user import UserCreate, UserOut, Token, UserPreferencesUpdate
 from app.core.security import get_password_hash, verify_password, create_access_token
 from app.api.deps import get_current_user
 
@@ -40,7 +40,14 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     return current_user
 
-@router.get("/users", response_model=list[UserOut])
-async def get_all_users():
-    users = await User.find_all().to_list()
-    return [{"id": str(u.id), "username": u.username, "email": u.email} for u in users]
+@router.put("/me/preferences", response_model=UserOut)
+async def update_preferences(
+    prefs: UserPreferencesUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    current_user.dietary_preferences = prefs.dietary_preferences
+    current_user.max_prep_time = prefs.max_prep_time
+    await current_user.save()
+    return current_user
+
+

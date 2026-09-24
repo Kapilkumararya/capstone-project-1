@@ -10,8 +10,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    LLM_API_KEY: str = ""
+    LLM_API_KEY: str = ""  # Groq
+    GEMINI_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
 
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()
+

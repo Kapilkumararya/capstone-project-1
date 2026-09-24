@@ -21,6 +21,9 @@ export async function fetchApi(endpoint: string, options: RequestInit = {}) {
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      window.dispatchEvent(new Event("auth-unauthorized"));
+    }
     let message = "API request failed";
     try {
       const errorData = await response.json();

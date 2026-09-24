@@ -23,8 +23,9 @@ async def init_db():
     from app.models.recipe import Recipe
     from app.models.detection import DetectionRun
     from app.models.session import CookingSession
+    from app.models.community import CommunityPost
 
     # Initialize beanie with all document models
-    await init_beanie(database=db, document_models=[User, Recipe, DetectionRun, CookingSession])
+    await init_beanie(database=db, document_models=[User, Recipe, DetectionRun, CookingSession, CommunityPost])
     logger.info("Database initialized successfully.")
 

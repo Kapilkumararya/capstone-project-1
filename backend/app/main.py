@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.db.database import init_db
 
-from app.api import auth, recipes, detection, recommendations, assistant
+from app.api import auth, recipes, detection, recommendations, assistant, admin, community
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,10 +28,12 @@ app.add_middleware(
 
 # Include Routers
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
+app.include_router(admin.router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 app.include_router(recipes.router, prefix=f"{settings.API_V1_STR}/recipes", tags=["recipes"])
 app.include_router(detection.router, prefix=f"{settings.API_V1_STR}/detect", tags=["detection"])
 app.include_router(recommendations.router, prefix=f"{settings.API_V1_STR}/recommendations", tags=["recommendations"])
 app.include_router(assistant.router, prefix=f"{settings.API_V1_STR}/assistant", tags=["assistant"])
+app.include_router(community.router, prefix=f"{settings.API_V1_STR}/community", tags=["community"])
 
 @app.get("/health", tags=["health"])
 async def health_check():

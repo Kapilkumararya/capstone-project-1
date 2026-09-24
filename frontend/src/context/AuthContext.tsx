@@ -59,6 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  useEffect(() => {
+    const handleUnauthorized = () => logout();
+    window.addEventListener("auth-unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("auth-unauthorized", handleUnauthorized);
+  }, []);
+
   return (
     <AuthContext.Provider value={{ user, token, loading, login, logout, showAuthModal, setShowAuthModal }}>
       {children}
