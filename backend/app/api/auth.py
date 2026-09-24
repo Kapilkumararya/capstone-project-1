@@ -39,3 +39,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 @router.get("/me", response_model=UserOut)
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.get("/users", response_model=list[UserOut])
+async def get_all_users():
+    users = await User.find_all().to_list()
+    return [{"id": str(u.id), "username": u.username, "email": u.email} for u in users]

@@ -61,7 +61,7 @@ async def process_chat_message(
     if api_key and api_key != "your_llm_api_key":
         try:
             # Build conversation history from session
-            recent_history = session.chat_history[-6:] if session.chat_history else []
+            recent_history = session.messages[-6:] if session.messages else []
             messages = [
                 {
                     "role": "system",
@@ -77,7 +77,7 @@ async def process_chat_message(
                 }
             ]
             for h in recent_history:
-                messages.append({"role": h.role, "content": h.message})
+                messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
             messages.append({"role": "user", "content": user_message})
 
             headers = {

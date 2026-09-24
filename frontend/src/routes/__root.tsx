@@ -4,9 +4,29 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
+  Navigate,
 } from "@tanstack/react-router";
 import { AppShell } from "@/components/cookai";
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { useEffect } from "react";
+
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { user, loading, setShowAuthModal } = useAuth();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  useEffect(() => {
+    if (!loading && !user && pathname !== "/") {
+      setShowAuthModal(true);
+    }
+  }, [loading, user, pathname, setShowAuthModal]);
+
+  if (loading) return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+  if (!user && pathname !== "/") {
+    return <Navigate to="/" />;
+  }
+  return <>{children}</>;
+}
 
 function NotFoundComponent() {
   return (
@@ -77,7 +97,11 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AppShell><Outlet /></AppShell>
+        <AppShell>
+          <AuthGuard>
+            <Outlet />
+          </AuthGuard>
+        </AppShell>
       </AuthProvider>
     </QueryClientProvider>
   );

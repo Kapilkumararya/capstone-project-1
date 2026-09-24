@@ -346,6 +346,69 @@ export function CookTogetherPage() {
   </div>;
 }
 
+export function PreferencesPage() {
+  const [diet, setDiet] = useState<string[]>(["Vegetarian"]);
+  const [time, setTime] = useState("30");
+  const toggleDiet = (d: string) => setDiet(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+  return <div className="mx-auto max-w-5xl gentle-in"><PageTitle title="Dietary Preferences"/>
+    <section className="relative mt-6 min-h-[420px] rounded-2xl bg-card p-8 soft-shadow">
+      <h2 className="text-xl font-bold">Dietary Restrictions</h2>
+      <p className="text-sm text-muted-foreground mt-1">Select the diets you follow, and CookAI will adapt recipes for you.</p>
+      <div className="mt-4 flex gap-4 flex-wrap">
+        {["Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free", "Keto", "Paleo"].map(d => (
+          <label key={d} className={`flex items-center gap-2 rounded-xl p-3 text-sm cursor-pointer border ${diet.includes(d) ? "bg-secondary border-primary/20" : "bg-muted border-transparent"}`}>
+            <Checkbox checked={diet.includes(d)} onCheckedChange={() => toggleDiet(d)} /> {d}
+          </label>
+        ))}
+      </div>
+      
+      <h2 className="text-xl font-bold mt-10">Maximum Prep Time</h2>
+      <p className="text-sm text-muted-foreground mt-1">How much time do you usually have for cooking?</p>
+      <div className="mt-4 flex items-center gap-4 max-w-sm">
+        <input type="range" min="10" max="120" step="10" value={time} onChange={(e) => setTime(e.target.value)} className="flex-1" />
+        <span className="font-bold text-sm w-16 text-right">{time} mins</span>
+      </div>
+      
+      <Button className="mt-10 rounded-full">Save Preferences</Button>
+    </section>
+  </div>;
+}
+
+export function SettingsPage() {
+  const { user } = useAuth();
+  return <div className="mx-auto max-w-5xl gentle-in"><PageTitle title="Account Settings"/>
+    <section className="relative mt-6 min-h-[420px] rounded-2xl bg-card p-8 soft-shadow">
+      <h2 className="text-xl font-bold">Profile</h2>
+      <div className="mt-4 grid gap-4 max-w-md">
+        <label className="text-sm font-bold">Username
+          <input type="text" defaultValue={user?.username} className="mt-1 block w-full rounded-lg border border-border bg-secondary p-2 outline-none" />
+        </label>
+        <label className="text-sm font-bold">Email
+          <input type="email" defaultValue={user?.email} className="mt-1 block w-full rounded-lg border border-border bg-secondary p-2 outline-none" />
+        </label>
+      </div>
+      
+      <h2 className="text-xl font-bold mt-10">Notifications</h2>
+      <div className="mt-4 space-y-3 max-w-md">
+        <label className="flex items-center justify-between p-3 rounded-xl bg-muted text-sm cursor-pointer">
+          <span>Weekly Recipe Digest</span>
+          <Checkbox defaultChecked />
+        </label>
+        <label className="flex items-center justify-between p-3 rounded-xl bg-muted text-sm cursor-pointer">
+          <span>Community Mentions & Replies</span>
+          <Checkbox defaultChecked />
+        </label>
+        <label className="flex items-center justify-between p-3 rounded-xl bg-muted text-sm cursor-pointer">
+          <span>Cook Together Invites</span>
+          <Checkbox defaultChecked />
+        </label>
+      </div>
+      
+      <Button className="mt-10 rounded-full">Update Profile</Button>
+    </section>
+  </div>;
+}
+
 export function SimplePage({ title, text }: { title: string; text: string }) {
   return <div className="mx-auto max-w-5xl gentle-in"><PageTitle title={title}/><section className="relative mt-6 min-h-[420px] overflow-hidden rounded-2xl bg-card p-8 soft-shadow leaf-doodle"><span className="grid size-14 place-items-center rounded-2xl bg-secondary"><Leaf/></span><h2 className="mt-6 text-2xl font-bold">Your kitchen, your way.</h2><p className="mt-2 max-w-md text-muted-foreground">{text}</p></section></div>;
 }
